@@ -71,8 +71,16 @@ cd /root/slurm-18.08.8 && \
 make && \
 make install
 
+cp /vagrant/slurm.conf /usr/local/etc/slurm.conf
+cp /vagrant/slurmdbd.conf /usr/local/etc/slurmdbd.conf
 cp /root/slurm-18.08.8/etc/slurmdbd.service /usr/lib/systemd/system
 cp /root/slurm-18.08.8/etc/slurmctld.service /usr/lib/systemd/system
+
+useradd -m slurm
+mkdir /var/spool/slurmd
+chown slurm:slurm /var/spool/slurmd
+mkdir /var/spool/slurmctld
+chown slurm:slurm /var/spool/slurmctld
 
 mkdir /etc/PDSH
 printf 'node00\nnode01\n' > /etc/PDSH/hosts
@@ -83,18 +91,31 @@ echo "10.10.10.4    node00" >> /etc/hosts
 echo "10.10.10.5    node01" >> /etc/hosts
 SCRIPT
 
-$script2 = <<SCRIPT
+$headnode_script = <<SCRIPT
+export PATH=/usr/local/bin/:$PATH
 dd if=/dev/random of=/etc/munge/munge.key bs=1024 count=1
 chown munge:munge /etc/munge/munge.key
 chmod 600 /etc/munge/munge.key
 
 systemctl daemon-reload
+
+systemctl enable munge
+systemctl start munge
+
 systemctl enable slurmdbd.service
 systemctl enable slurmctld.service
+systemctl enable mariadb
+
 systemctl start mariadb
 mysql -e "create user 'slurm'@'localhost' identified by 'password'"
 mysql -e "grant all on slurm_acct_db.* TO 'slurm'@'localhost'"
 systemctl start slurmdbd.service
+
+sacctmgr -i create cluster cluster
+sacctmgr -i create account cluster_account
+sacctmgr -i create user steve fred account=cluster_account
+
+systemctl start slurmctld
 
 SCRIPT
 
@@ -111,7 +132,7 @@ Vagrant.configure("2") do |global_config|
             # VM specifications
             config.vm.provider :virtualbox do |v|
                 v.cpus = 1
-                v.memory = 512
+                v.memory = 1024
             end
 
             # VM provisioning
@@ -121,11 +142,7 @@ Vagrant.configure("2") do |global_config|
 
     # extra provisioning steps for head node
     global_config.vm.define "headnode", primary: true do |headnode|
-        headnode.vm.provision :shell, :inline => $script2
+        headnode.vm.provision :shell, :inline => $headnode_script
     end
 
 end
-
-# Vagrant.configure("2") do |config|
-#   config.vm.box = "generic/rhel7"
-# end
