@@ -17,7 +17,7 @@ slurm_cluster = {
     }
 }
 
-# Provisioning inline script
+# Provisioning inline script for all nodes
 $script = <<SCRIPT
 yum upgrade
 yum install -y epel-release
@@ -91,6 +91,7 @@ echo "10.10.10.4    node00" >> /etc/hosts
 echo "10.10.10.5    node01" >> /etc/hosts
 SCRIPT
 
+# extra provisioning script for just the head node
 $headnode_script = <<SCRIPT
 export PATH=/usr/local/bin/:$PATH
 dd if=/dev/random of=/etc/munge/munge.key bs=1024 count=1
