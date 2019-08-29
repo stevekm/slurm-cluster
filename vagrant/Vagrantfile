@@ -1,0 +1,131 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# Define the list of machines in the cluster
+slurm_cluster = {
+    :headnode => {
+        :hostname => "headnode",
+        :ipaddress => "10.10.10.3"
+    },
+    :node00 => {
+        :hostname => "node00",
+        :ipaddress => "10.10.10.4"
+    },
+    :node01 => {
+        :hostname => "node01",
+        :ipaddress => "10.10.10.5"
+    }
+}
+
+# Provisioning inline script
+$script = <<SCRIPT
+yum upgrade
+yum install -y epel-release
+yum install -y bind-utils \
+expect \
+gcc \
+git \
+gtk2-devel \
+hdf5-devel \
+hwloc \
+hwloc-devel \
+hwloc-gui \
+libibmad \
+libibumad \
+libcurl \
+libssh2-devel \
+lua \
+lua-devel \
+man \
+make \
+man2html \
+mariadb \
+mariadb-devel \
+mariadb-server \
+munge \
+munge-devel \
+munge-libs \
+net-tools \
+ncurses-devel \
+nfs-utils \
+numactl \
+numactl-devel \
+openssh-server \
+openssl-devel \
+pam-devel \
+perl-ExtUtils-MakeMaker \
+python-pip \
+readline-devel \
+rpm-build \
+rrdtool-devel \
+wget \
+pdsh
+
+wget https://download.schedmd.com/slurm/slurm-18.08.8.tar.bz2 && \
+tar -jxvf slurm-18.08.8.tar.bz2 && \
+rm -f slurm-18.08.8.tar.bz2 && \
+mv slurm-18.08.8 /root/
+
+cd /root/slurm-18.08.8 && \
+./configure && \
+make && \
+make install
+
+cp /root/slurm-18.08.8/etc/slurmdbd.service /usr/lib/systemd/system
+cp /root/slurm-18.08.8/etc/slurmctld.service /usr/lib/systemd/system
+
+mkdir /etc/PDSH
+printf 'node00\nnode01\n' > /etc/PDSH/hosts
+export WCOLL=/etc/PDSH/hosts
+
+echo "10.10.10.3    headnode" >> /etc/hosts
+echo "10.10.10.4    node00" >> /etc/hosts
+echo "10.10.10.5    node01" >> /etc/hosts
+SCRIPT
+
+$script2 = <<SCRIPT
+dd if=/dev/random of=/etc/munge/munge.key bs=1024 count=1
+chown munge:munge /etc/munge/munge.key
+chmod 600 /etc/munge/munge.key
+
+systemctl daemon-reload
+systemctl enable slurmdbd.service
+systemctl enable slurmctld.service
+systemctl start mariadb
+mysql -e "create user 'slurm'@'localhost' identified by 'password'"
+mysql -e "grant all on slurm_acct_db.* TO 'slurm'@'localhost'"
+systemctl start slurmdbd.service
+
+SCRIPT
+
+Vagrant.configure("2") do |global_config|
+    # initial setup of each VM in the cluster
+    slurm_cluster.each_pair do |name, options|
+        global_config.vm.define name do |config|
+            # VM configurations
+            # config.vm.box = "generic/rhel7"
+            config.vm.box = "centos/7"
+            config.vm.hostname = "#{name}"
+            config.vm.network :private_network, ip: options[:ipaddress]
+
+            # VM specifications
+            config.vm.provider :virtualbox do |v|
+                v.cpus = 1
+                v.memory = 512
+            end
+
+            # VM provisioning
+            config.vm.provision :shell, :inline => $script
+        end
+    end
+
+    # extra provisioning steps for head node
+    global_config.vm.define "headnode", primary: true do |headnode|
+        headnode.vm.provision :shell, :inline => $script2
+    end
+
+end
+
+# Vagrant.configure("2") do |config|
+#   config.vm.box = "generic/rhel7"
+# end
