@@ -19,6 +19,7 @@ slurm_cluster = {
 
 # Provisioning inline script for all nodes
 $script = <<SCRIPT
+set -x
 yum upgrade
 yum install -y epel-release
 yum install -y bind-utils \
@@ -68,8 +69,8 @@ mv slurm-18.08.8 /root/
 
 cd /root/slurm-18.08.8 && \
 ./configure && \
-make && \
-make install
+make -j 2 && \
+make install -j 2
 
 cp /vagrant/slurm.conf /usr/local/etc/slurm.conf
 cp /vagrant/slurmdbd.conf /usr/local/etc/slurmdbd.conf
@@ -95,6 +96,7 @@ SCRIPT
 
 # extra provisioning script for just the head node
 $headnode_script = <<SCRIPT
+set -x
 dd if=/dev/random of=/etc/munge/munge.key bs=1024 count=1
 chown munge:munge /etc/munge/munge.key
 chmod 600 /etc/munge/munge.key
@@ -109,9 +111,11 @@ systemctl enable slurmctld.service
 systemctl enable mariadb
 
 systemctl start mariadb
+/usr/bin/mysqladmin' -u root password 'new-password'
+/usr/bin/mysqladmin' -u root -h headnode password 'new-password'
 mysql -e "create user 'slurm'@'localhost' identified by 'password'"
 mysql -e "grant all on slurm_acct_db.* TO 'slurm'@'localhost'"
-systemctl start slurmdbd.service
+systemctl start slurmdbd
 
 sacctmgr -i create cluster cluster
 sacctmgr -i create account cluster_account
@@ -121,16 +125,20 @@ systemctl start slurmctld
 
 SCRIPT
 
+# headnode: ++ systemctl start slurmdbd
+# headnode: ++ sacctmgr -i create cluster cluster
 # headnode: sacctmgr: error: slurm_persist_conn_open_without_init: failed to open persistent connection to localhost:6819: Connection refused
 # headnode: sacctmgr: error: slurmdbd: Sending PersistInit msg: Connection refused
 # headnode: sacctmgr: error: Problem talking to the database: Connection refused
+# headnode: ++ sacctmgr -i create account cluster_account
 # headnode: sacctmgr: error: slurm_persist_conn_open_without_init: failed to open persistent connection to localhost:6819: Connection refused
 # headnode: sacctmgr: error: slurmdbd: Sending PersistInit msg: Connection refused
 # headnode: sacctmgr: error: Problem talking to the database: Connection refused
+# headnode: ++ sacctmgr -i create user steve account=cluster_account
 # headnode: sacctmgr: error: slurm_persist_conn_open_without_init: failed to open persistent connection to localhost:6819: Connection refused
 # headnode: sacctmgr: error: slurmdbd: Sending PersistInit msg: Connection refused
 # headnode: sacctmgr: error: Problem talking to the database: Connection refused
-# headnode: Job for slurmctld.service failed because a configured resource limit was exceeded. See "systemctl status slurmctld.service" and "journalctl -xe" for details.
+# headnode: ++ systemctl start slurmctld
 
 # troubleshooting;
 # [root@headnode ~]# cat /var/log/messages
@@ -148,7 +156,7 @@ Vagrant.configure("2") do |global_config|
 
             # VM specifications
             config.vm.provider :virtualbox do |v|
-                v.cpus = 1
+                v.cpus = 2
                 v.memory = 1024
             end
 
