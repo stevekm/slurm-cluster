@@ -96,7 +96,7 @@ SCRIPT
 
 # extra provisioning script for just the head node
 $headnode_script = <<SCRIPT
-set -x
+set -xe
 dd if=/dev/random of=/etc/munge/munge.key bs=1024 count=1
 chown munge:munge /etc/munge/munge.key
 chmod 600 /etc/munge/munge.key
@@ -111,11 +111,11 @@ systemctl enable slurmctld.service
 systemctl enable mariadb
 
 systemctl start mariadb
-/usr/bin/mysqladmin' -u root password 'new-password'
-/usr/bin/mysqladmin' -u root -h headnode password 'new-password'
+systemctl status mariadb
 mysql -e "create user 'slurm'@'localhost' identified by 'password'"
 mysql -e "grant all on slurm_acct_db.* TO 'slurm'@'localhost'"
 systemctl start slurmdbd
+systemctl status slurmdbd
 
 sacctmgr -i create cluster cluster
 sacctmgr -i create account cluster_account
@@ -124,6 +124,9 @@ sacctmgr -i create user steve account=cluster_account
 systemctl start slurmctld
 
 SCRIPT
+
+# /usr/bin/mysqladmin' -u root password 'new-password'
+# /usr/bin/mysqladmin' -u root -h headnode password 'new-password'
 
 # headnode: ++ systemctl start slurmdbd
 # headnode: ++ sacctmgr -i create cluster cluster
