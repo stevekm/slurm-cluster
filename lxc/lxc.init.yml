@@ -1,0 +1,17 @@
+config:
+  core.https_address: 10.0.2.15:8443
+networks: []
+storage_pools: []
+profiles:
+- config: {}
+  description: ""
+  devices: {}
+  name: default
+cluster:
+  server_name: ubuntu-bionic
+  enabled: true
+  member_config: []
+  cluster_address: ""
+  cluster_certificate: ""
+  server_address: ""
+  cluster_password: ""
