@@ -20,6 +20,8 @@ slurm_cluster = {
 # Provisioning inline script for all nodes
 $script = <<SCRIPT
 set -x
+
+# install packages needed for SLURM
 yum upgrade
 yum install -y epel-release
 yum install -y bind-utils \
@@ -62,6 +64,7 @@ rrdtool-devel \
 wget \
 pdsh
 
+# download and compile SLURM source code
 wget https://download.schedmd.com/slurm/slurm-18.08.8.tar.bz2 && \
 tar -jxvf slurm-18.08.8.tar.bz2 && \
 rm -f slurm-18.08.8.tar.bz2 && \
@@ -72,23 +75,32 @@ cd /root/slurm-18.08.8 && \
 make -j 2 && \
 make install -j 2
 
-cp /vagrant/slurm.conf /usr/local/etc/slurm.conf
-cp /vagrant/slurmdbd.conf /usr/local/etc/slurmdbd.conf
+# import SLURM config files from Vagrant host
+cp /vm_share/slurm.conf /usr/local/etc/slurm.conf
+cp /vm_share/slurmdbd.conf /usr/local/etc/slurmdbd.conf
+
+# import SLURM service files from source
 cp /root/slurm-18.08.8/etc/slurmdbd.service /usr/lib/systemd/system
 cp /root/slurm-18.08.8/etc/slurmctld.service /usr/lib/systemd/system
 
+# setup 'slurm' user and required directories
 useradd -m slurm
 mkdir /var/spool/slurmd
 chown slurm:slurm /var/spool/slurmd
 mkdir /var/spool/slurmctld
 chown slurm:slurm /var/spool/slurmctld
+mkdir /var/log/slurm/
+chown slurm:slurm /var/log/slurm/
 
+# set up pdsh for easier manual provisioning later (optional)
 mkdir /etc/PDSH
 printf 'node00\nnode01\n' > /etc/PDSH/hosts
-
-echo 'PATH=/usr/local/bin/:$PATH' >> /etc/profile
 echo 'WCOLL=/etc/PDSH/hosts' >> /etc/profile
 
+# update PATH for SLURM binaries
+echo 'PATH=/usr/local/bin/:$PATH' >> /etc/profile
+
+# update hosts file for Vagrant cluster IP addresses
 echo "10.10.10.3    headnode" >> /etc/hosts
 echo "10.10.10.4    node00" >> /etc/hosts
 echo "10.10.10.5    node01" >> /etc/hosts
@@ -97,10 +109,16 @@ SCRIPT
 # extra provisioning script for just the head node
 $headnode_script = <<SCRIPT
 set -xe
+
+# create munge key file
 dd if=/dev/random of=/etc/munge/munge.key bs=1024 count=1
 chown munge:munge /etc/munge/munge.key
 chmod 600 /etc/munge/munge.key
 
+# export the munge key to the host for the nodes to pick up later
+cp -p /etc/munge/munge.key /vm_share/
+
+# reset the system daemon configs and start required services
 systemctl daemon-reload
 
 systemctl enable munge
@@ -112,36 +130,41 @@ systemctl enable mariadb
 
 systemctl start mariadb
 systemctl status mariadb
+
+# need to create the slurm database user
 mysql -e "create user 'slurm'@'localhost' identified by 'password'"
 mysql -e "grant all on slurm_acct_db.* TO 'slurm'@'localhost'"
+
+# start the SLURM database service
 systemctl start slurmdbd
 systemctl status slurmdbd
 
+# wait and then check if the database is available
+sleep 10
+netstat -antp | grep LISTEN
+
+# set up the accounting for the cluster
 sacctmgr -i create cluster cluster
 sacctmgr -i create account cluster_account
 sacctmgr -i create user steve account=cluster_account
 
+# finally start the SLURM controller daemon
 systemctl start slurmctld
 
 SCRIPT
 
-# /usr/bin/mysqladmin' -u root password 'new-password'
-# /usr/bin/mysqladmin' -u root -h headnode password 'new-password'
+# provisioning script for compute nodes
+$node_script = <<SCRIPT
+set -xe
 
-# headnode: ++ systemctl start slurmdbd
-# headnode: ++ sacctmgr -i create cluster cluster
-# headnode: sacctmgr: error: slurm_persist_conn_open_without_init: failed to open persistent connection to localhost:6819: Connection refused
-# headnode: sacctmgr: error: slurmdbd: Sending PersistInit msg: Connection refused
-# headnode: sacctmgr: error: Problem talking to the database: Connection refused
-# headnode: ++ sacctmgr -i create account cluster_account
-# headnode: sacctmgr: error: slurm_persist_conn_open_without_init: failed to open persistent connection to localhost:6819: Connection refused
-# headnode: sacctmgr: error: slurmdbd: Sending PersistInit msg: Connection refused
-# headnode: sacctmgr: error: Problem talking to the database: Connection refused
-# headnode: ++ sacctmgr -i create user steve account=cluster_account
-# headnode: sacctmgr: error: slurm_persist_conn_open_without_init: failed to open persistent connection to localhost:6819: Connection refused
-# headnode: sacctmgr: error: slurmdbd: Sending PersistInit msg: Connection refused
-# headnode: sacctmgr: error: Problem talking to the database: Connection refused
-# headnode: ++ systemctl start slurmctld
+# reset the system daemon configs and start required services
+systemctl daemon-reload
+
+systemctl enable munge
+systemctl start munge
+
+SCRIPT
+
 
 # troubleshooting;
 # [root@headnode ~]# cat /var/log/messages
@@ -156,6 +179,9 @@ Vagrant.configure("2") do |global_config|
             config.vm.box = "centos/7"
             config.vm.hostname = "#{name}"
             config.vm.network :private_network, ip: options[:ipaddress]
+            # https://stackoverflow.com/questions/40972345/vagrant-synced-folders-not-working-real-time-on-virtualbox
+            # https://www.vagrantup.com/docs/synced-folders/rsync.html
+            config.vm.synced_folder ".", "/vm_share", type: "rsync-auto"
 
             # VM specifications
             config.vm.provider :virtualbox do |v|
