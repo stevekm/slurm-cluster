@@ -224,8 +224,4 @@ Vagrant.configure("2") do |global_config|
         node00.vm.provision :shell, :inline => $node_script
     end
 
-    global_config.vm.define "headnode", primary: true do |headnode|
-        headnode.vm.provision :shell, :inline => $headnode_script2
-    end
-
 end
