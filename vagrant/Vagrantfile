@@ -49,6 +49,7 @@ mariadb-server \
 munge \
 munge-devel \
 munge-libs \
+nfs-utils \
 net-tools \
 ncurses-devel \
 nfs-utils \
@@ -150,12 +151,31 @@ netstat -antp | grep LISTEN
 # set up the accounting for the cluster
 sacctmgr -i create cluster cluster
 sacctmgr -i create account cluster_account
-sacctmgr -i create user steve account=cluster_account
+sacctmgr -i create user vagrant account=cluster_account
 
 # finally start the SLURM controller daemon
 systemctl start slurmctld
 sleep 5
 systemctl status slurmctld
+
+# set up NFS share for compute nodes
+mkdir /var/nfsshare
+chmod -R 777 /var/nfsshare
+chown nfsnobody:nfsnobody /var/nfsshare
+
+systemctl enable rpcbind
+systemctl enable nfs-server
+systemctl enable nfs-lock
+systemctl enable nfs-idmap
+systemctl start rpcbind
+systemctl start nfs-server
+systemctl start nfs-lock
+systemctl start nfs-idmap
+
+echo '/var/nfsshare    10.10.10.4(rw,sync,no_root_squash,no_all_squash)' > /etc/exports
+echo '/var/nfsshare    10.10.10.5(rw,sync,no_root_squash,no_all_squash)' >> /etc/exports
+exportfs -a
+systemctl restart nfs-server
 
 SCRIPT
 
@@ -171,8 +191,14 @@ systemctl start slurmd
 sleep 5
 systemctl status slurmd
 
+# set up NFS share mount points
+mkdir /mnt/nfs/var/nfsshare
+mount -t nfs 10.10.10.3:/var/nfsshare /mnt/nfs/var/nfsshare/
+
+echo "10.10.10.3:/var/nfsshare    /mnt/nfs/var/nfsshare   nfs defaults 0 0" >> /etc/fstab
 SCRIPT
 
+# don't use this, need to run externally instead after provisioning is finished
 $headnode_script2 = <<SCRIPT
 set -xe
 

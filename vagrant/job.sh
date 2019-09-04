@@ -1,4 +1,5 @@
 #!/bin/bash
+#SBATCH --output=/mnt/nfs/var/nfsshare/%j.out
 #SBATCH -p debug
 #SBATCH -N 1
 #SBATCH --ntasks-per-node=1

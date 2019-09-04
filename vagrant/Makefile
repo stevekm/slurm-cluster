@@ -33,6 +33,11 @@ reload:
 	sudo systemctl start slurmctld; \
 	sleep 1; \
 	sudo systemctl status slurmctld; \
+	sudo systemctl start rpcbind; \
+	sudo systemctl start nfs-server; \
+	sudo systemctl start nfs-lock; \
+	sudo systemctl start nfs-idmap; \
+	sudo chmod 777 /var/nfsshare; \
 	' && \
 	vagrant ssh node00 -- -t 'sudo systemctl start munge; \
 	sleep 1; \
@@ -41,6 +46,7 @@ reload:
 	sudo systemctl start slurmd; \
 	sleep 1; \
 	sudo systemctl status slurmd; \
+	sudo mount -a; \
 	' && \
 	vagrant ssh node01 -- -t 'sudo systemctl start munge; \
 	sleep 1; \
@@ -49,6 +55,7 @@ reload:
 	sudo systemctl start slurmd; \
 	sleep 1; \
 	sudo systemctl status slurmd; \
+	sudo mount -a; \
 	' && \
 	vagrant ssh headnode -- -t 'sinfo; \
 	sudo -E env "PATH=/usr/local/bin/:$$PATH" scontrol update nodename=node00 state=resume; \
@@ -66,6 +73,7 @@ test:
 
 debug:
 	vagrant ssh headnode -- -t 'sudo cat /var/log/slurmctld.log'
+	vagrant ssh headnode -- -t 'sudo tail /var/log/messages'
 	vagrant ssh headnode -- -t 'sudo scontrol show node'
 	vagrant ssh node00 -- -t 'sudo cat /var/log/slurmd.log'
 	vagrant ssh node01 -- -t 'sudo cat /var/log/slurmd.log'
