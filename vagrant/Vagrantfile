@@ -30,6 +30,7 @@ gcc \
 git \
 gtk2-devel \
 hdf5-devel \
+htop \
 hwloc \
 hwloc-devel \
 hwloc-gui \
