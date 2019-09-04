@@ -81,7 +81,14 @@ cp /vagrant/slurmdbd.conf /usr/local/etc/slurmdbd.conf
 
 # import SLURM service files from source
 cp /root/slurm-18.08.8/etc/slurmdbd.service /usr/lib/systemd/system
+cp /root/slurm-18.08.8/etc/slurmd.service /usr/lib/systemd/system
 cp /root/slurm-18.08.8/etc/slurmctld.service /usr/lib/systemd/system
+
+systemctl enable slurmd.service
+systemctl enable slurmdbd.service
+systemctl enable slurmctld.service
+systemctl enable munge
+systemctl enable mariadb
 
 # reset the system daemon configs and start required services
 systemctl daemon-reload
@@ -118,14 +125,9 @@ SCRIPT
 $headnode_script = <<SCRIPT
 set -xe
 
-systemctl enable munge
 systemctl start munge
 sleep 5
 systemctl status munge
-
-systemctl enable slurmdbd.service
-systemctl enable slurmctld.service
-systemctl enable mariadb
 
 systemctl start mariadb
 sleep 5
@@ -160,16 +162,30 @@ SCRIPT
 $node_script = <<SCRIPT
 set -xe
 
-# reset the system daemon configs and start required services
-systemctl daemon-reload
-
-systemctl enable munge
 systemctl start munge
 sleep 5
 systemctl status munge
 
+systemctl start slurmd
+sleep 5
+systemctl status slurmd
+
 SCRIPT
 
+$headnode_script2 = <<SCRIPT
+set -xe
+
+sinfo
+
+scontrol update nodename=node00 state=resume
+sleep 5
+
+scontrol update nodename=node01 state=resume
+sleep 5
+
+sinfo
+
+SCRIPT
 
 # troubleshooting;
 # [root@headnode ~]# cat /var/log/messages
@@ -180,8 +196,7 @@ Vagrant.configure("2") do |global_config|
     slurm_cluster.each_pair do |name, options|
         global_config.vm.define name do |config|
             # VM configurations
-            # config.vm.box = "generic/rhel7"
-            config.vm.box = "centos/7"
+            config.vm.box = "centos/7" # "generic/rhel7"
             config.vm.hostname = "#{name}"
             config.vm.network :private_network, ip: options[:ipaddress]
 
@@ -207,6 +222,10 @@ Vagrant.configure("2") do |global_config|
 
     global_config.vm.define "node01", primary: true do |node00|
         node00.vm.provision :shell, :inline => $node_script
+    end
+
+    global_config.vm.define "headnode", primary: true do |headnode|
+        headnode.vm.provision :shell, :inline => $headnode_script2
     end
 
 end
