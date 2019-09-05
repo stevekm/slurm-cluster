@@ -13,8 +13,16 @@ Vagrant.configure("2") do |config|
     apt-get update
     apt-get install -y git \
     wget \
-    nano
-    snap install lxd --channel=3.0/stable
+    nano \
+    lxc
     cat /vagrant/lxc.init.yml | lxd init --preseed
+    mkdir -p /home/vagrant/.config/lxc
+    cp /etc/lxc/default.conf /home/vagrant/.config/lxc/default.conf
+    echo "lxc.idmap = u 0 $(cat /etc/subuid | grep vagrant | cut -d ':' -f2) 65536" >> /home/vagrant/.config/lxc/default.conf
+    echo "lxc.idmap = g 0 $(cat /etc/subuid | grep vagrant | cut -d ':' -f2) 65536" >> /home/vagrant/.config/lxc/default.conf
+    echo "vagrant veth lxcbr0 10" >> /etc/lxc/lxc-usernet
   SHELL
 end
+# $ lxc --version
+# 3.0.3
+# centos	7	amd64	default	20190904_07:08
